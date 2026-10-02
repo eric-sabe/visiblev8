@@ -42,7 +42,7 @@ if [ -x "$V8_SHELL" ]; then
         sbase=${sbase%.js}
 
         echo -n "  $script: "
-        "$V8_SHELL" "$script" >/dev/null
+        "$V8_SHELL" --no-maglev --no-turbofan "$script" >/dev/null
 
         expected="$EXPECTED_LOGS/$sbase.log"
         actual="$SCRATCH_DIR/$sbase.actual.log"
