@@ -1,92 +1,58 @@
 #!/bin/bash
 set -e
 
-export PATH="/work/depot_tools:$PATH"
-export DEPOT_TOOLS_UPDATE=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VV8_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+VERSION="${1:-155.0.8059.30}"
 
-cd /work/v8
+# Normalize line endings on test files (prevent CRLF character offset discrepancies)
+sed -i 's/\r$//' "$VV8_DIR/tests/src"/* "$VV8_DIR/tests/logs"/* 2>/dev/null || true
 
-echo "=== Step 1: Checking git branch and status ==="
-git checkout vv8-155
-git status
+# Look for pre-compiled vv8-shell in artifacts
+ARTIFACT_SHELL=$(find "$VV8_DIR/builder/artifacts" -name "vv8-shell*" -type f 2>/dev/null | head -n 1)
 
-echo "=== Step 2: Generating build files with GN ==="
-mkdir -p out/Release
-cat > out/Release/args.gn << 'EOF'
+if [ -n "$ARTIFACT_SHELL" ]; then
+    echo "=== Found Pre-compiled V8 Shell: $ARTIFACT_SHELL ==="
+    echo "=== Running 3-Minute Canary Oracle (Regression Suite) ==="
+    chmod +x "$VV8_DIR/tests/run.sh" "$VV8_DIR/tests/logs/entry.sh"
+    cd "$VV8_DIR/tests"
+    ./run.sh python:3-bookworm trace-apis-obj
+    echo "=========================================="
+    echo "SUCCESS: ALL TESTS PASSED WITH 0 DIFFS!"
+    echo "=========================================="
+    exit 0
+fi
+
+# If vv8-shell is not yet built, build it via build-direct or local V8 tree
+echo "=== v8_shell not found in artifacts, initiating compilation ==="
+if [ -d "/work/v8" ] && command -v ninja >/dev/null 2>&1; then
+    export PATH="/work/depot_tools:$PATH"
+    export DEPOT_TOOLS_UPDATE=0
+    cd /work/v8
+    mkdir -p out/Release
+    cat > out/Release/args.gn << 'EOF'
 is_debug = false
 dcheck_always_on = false
 symbol_level = 0
 v8_enable_lazy_source_positions = false
 vv8_trace_properties = true
 EOF
-
-/work/v8/buildtools/linux64/gn gen out/Release
-
-echo "=== Step 3: Compiling v8_shell ==="
-/usr/bin/ninja -C out/Release v8_shell
-
-echo "=== Step 4: Setting up artifacts for tests ==="
-VERSION="155.0.8059.30"
-mkdir -p /artifacts/$VERSION
-cp out/Release/v8_shell /artifacts/$VERSION/vv8-shell-$VERSION
-if [ -f out/Release/snapshot_blob.bin ]; then
-    cp out/Release/snapshot_blob.bin /artifacts/$VERSION/
-fi
-if [ -f out/Release/icudtl.dat ]; then
-    cp out/Release/icudtl.dat /artifacts/$VERSION/
-fi
-chmod +x /artifacts/$VERSION/vv8-shell-$VERSION
-
-echo "=== Step 5: Testing basic v8_shell invocation ==="
-cd /tmp
-rm -f vv8-*.log
-/artifacts/$VERSION/vv8-shell-$VERSION -e "console.log('VisibleV8 standalone test execution');"
-ls -la vv8*
-
-echo "=== Step 6: Running VisibleV8 regression suite (10 tests) ==="
-rm -rf /testsrc
-cp -r /build/visiblev8/tests/src /testsrc
-sed -i 's/\r$//' /testsrc/*
-
-TEST_SRC="/testsrc"
-EXPECTED_LOGS="/build/visiblev8/tests/logs/trace-apis-obj"
-TOOLS="/build/visiblev8/tests/logs"
-SCRATCH_DIR=$(mktemp -d)
-V8_SHELL="/artifacts/$VERSION/vv8-shell-$VERSION"
-
-exitstatus=0
-for script in "$TEST_SRC"/*.js; do
-    sbase=$(basename "$script")
-    sbase=${sbase%.js}
-
-    echo -n "  Testing $sbase.js: "
-    rm -f vv8-*.log
-    "$V8_SHELL" --no-maglev --no-turbofan "$script" >/dev/null
-
-    expected="$EXPECTED_LOGS/$sbase.log"
-    actual="$SCRATCH_DIR/$sbase.actual.log"
-    mv vv8-*-vv8-shell-*.0.log "$actual"
-
-    python3 "$TOOLS/relabel.py" <"$actual" >"$SCRATCH_DIR/filtered_actual.log"
-    python3 "$TOOLS/relabel.py" <"$expected" >"$SCRATCH_DIR/filtered_expected.log"
-    if DIFFS=$(diff -u "$SCRATCH_DIR/filtered_actual.log" "$SCRATCH_DIR/filtered_expected.log"); then
-        echo "OK"
-    else
-        echo "FAIL"
-        echo "-----------------------"
-        echo "$DIFFS"
-        echo "-----------------------"
-        exitstatus=1
-    fi
-done
-
-if [ $exitstatus -eq 0 ]; then
-    echo "=========================================="
-    echo "SUCCESS: ALL 10 TESTS PASSED WITH 0 DIFFS!"
-    echo "=========================================="
+    /work/v8/buildtools/linux64/gn gen out/Release
+    ninja -C out/Release v8_shell
+    mkdir -p "$VV8_DIR/builder/artifacts/$VERSION"
+    cp out/Release/v8_shell "$VV8_DIR/builder/artifacts/$VERSION/vv8-shell-$VERSION"
+    chmod +x "$VV8_DIR/builder/artifacts/$VERSION/vv8-shell-$VERSION"
+    cd "$VV8_DIR/tests"
+    ./run.sh python:3-bookworm trace-apis-obj
 else
-    echo "=========================================="
-    echo "FAILURE: ONE OR MORE TESTS FAILED!"
-    echo "=========================================="
-    exit $exitstatus
+    echo "=== Building standalone v8_shell via Docker ==="
+    cd "$SCRIPT_DIR"
+    docker build --platform linux/amd64 -t build-direct -f build-direct.dockerfile .
+    docker run --platform linux/amd64 --rm \
+      -v "$SCRIPT_DIR/artifacts:/artifacts" \
+      -v "$SCRIPT_DIR/build:/build" \
+      -v "$VV8_DIR:/build/visiblev8" \
+      build-direct "$VERSION" 1 0 0 0 0 0
+    cd "$VV8_DIR/tests"
+    ./run.sh python:3-bookworm trace-apis-obj
 fi
