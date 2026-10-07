@@ -1,5 +1,5 @@
 diff --git a/BUILD.bazel b/BUILD.bazel
-index 2350f141..9388ed7d 100644
+index 2350f14..9388ed7 100644
 --- a/BUILD.bazel
 +++ b/BUILD.bazel
 @@ -2594,6 +2594,7 @@ filegroup(
@@ -11,14 +11,16 @@ index 2350f141..9388ed7d 100644
          "src/runtime/runtime-weak-refs.cc",
          "src/sandbox/bounded-size.h",
 diff --git a/BUILD.gn b/BUILD.gn
-index c6132807..1590a3d8 100644
+index c613280..c38a1bc 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
-@@ -341,7 +341,7 @@ declare_args() {
+@@ -340,8 +340,8 @@ declare_args() {
+   # specific hook).
    v8_check_header_includes = false
  
-   # Enable lazy source positions by default.
+-  # Enable lazy source positions by default.
 -  v8_enable_lazy_source_positions = true
++  # Enable lazy source positions by default. [disabling for VisibleV8]
 +  v8_enable_lazy_source_positions = false
  
    # Disable write barriers when GCs are non-incremental and
@@ -55,7 +57,7 @@ index c6132807..1590a3d8 100644
      "src/runtime/runtime.cc",
 diff --git a/include/v8-visiblev8.h b/include/v8-visiblev8.h
 new file mode 100644
-index 00000000..a8e8e217
+index 0000000..a8e8e21
 --- /dev/null
 +++ b/include/v8-visiblev8.h
 @@ -0,0 +1,31 @@
@@ -92,7 +94,7 @@ index 00000000..a8e8e217
 +#endif  // INCLUDE_V8_VISIBLEV8_H_
 \ No newline at end of file
 diff --git a/src/api/api.cc b/src/api/api.cc
-index adee1969..e05cffc3 100644
+index adee196..e05cffc 100644
 --- a/src/api/api.cc
 +++ b/src/api/api.cc
 @@ -12702,6 +12702,75 @@ std::string SourceLocation::ToString() const {
@@ -172,7 +174,7 @@ index adee1969..e05cffc3 100644
  
  #ifdef ENABLE_SLOW_DCHECKS
 diff --git a/src/builtins/builtins-api.cc b/src/builtins/builtins-api.cc
-index ff7ef690..3521e292 100644
+index ff7ef69..3521e29 100644
 --- a/src/builtins/builtins-api.cc
 +++ b/src/builtins/builtins-api.cc
 @@ -17,6 +17,10 @@
@@ -201,10 +203,10 @@ index ff7ef690..3521e292 100644
    // arguments on this path by porting this builtin to assembly and letting
    // it create the required frame structure.
 diff --git a/src/builtins/builtins-call-gen.cc b/src/builtins/builtins-call-gen.cc
-index d6e22ea9..828d8f35 100644
+index d6e22ea..89ba013 100644
 --- a/src/builtins/builtins-call-gen.cc
 +++ b/src/builtins/builtins-call-gen.cc
-@@ -932,6 +932,17 @@ TF_BUILTIN(HandleApiCallOrConstruct, CallOrConstructBuiltinsAssembler) {
+@@ -932,6 +932,19 @@ TF_BUILTIN(HandleApiCallOrConstruct, CallOrConstructBuiltinsAssembler) {
  #else
    auto dispatch_handle = InvalidDispatchHandleConstant();
  #endif
@@ -212,7 +214,9 @@ index d6e22ea9..828d8f35 100644
 +  auto args_ptr = args.AtIndexPtr(IntPtrConstant(0));
 +
 +  // This splits the pointer in 16-bit Smi chunks, and passes the resulting
-+  // array to the runtime
++  // array to the runtime no, I am not mad, take a look at how
++  // CodeStubAssembler::Print(... TNode<UintPtrT>) is implemented at
++  // https://source.chromium.org/chromium/chromium/src/+/main:v8/src/codegen/code-stub-assembler.cc;l=16637;drc=f4a00cc248dd2dc8ec8759fb51620d47b5114090;bpv=1;bpt=1
 +  TNode<Smi> chunks[4];
 +  for (int i = 0; i < 4; ++i) {
 +    chunks[i] = SmiFromUint32(ReinterpretCast<Uint32T>(Word32And(
@@ -222,7 +226,7 @@ index d6e22ea9..828d8f35 100644
  
    Label if_call(this), if_construct(this);
    Branch(IsUndefined(new_target), &if_call, &if_construct);
-@@ -943,6 +954,9 @@ TF_BUILTIN(HandleApiCallOrConstruct, CallOrConstructBuiltinsAssembler) {
+@@ -943,6 +956,9 @@ TF_BUILTIN(HandleApiCallOrConstruct, CallOrConstructBuiltinsAssembler) {
      TNode<FunctionTemplateInfo> function_template_info =
          CAST(LoadSharedFunctionInfoUntrustedFunctionData(shared));
  
@@ -233,7 +237,7 @@ index d6e22ea9..828d8f35 100644
      // current context at this point. For example, if target function was
      // called via Function.prototype.call or other similar builtins, or if it
 diff --git a/src/builtins/builtins-function.cc b/src/builtins/builtins-function.cc
-index b511c428..7521c7e1 100644
+index b511c42..7521c7e 100644
 --- a/src/builtins/builtins-function.cc
 +++ b/src/builtins/builtins-function.cc
 @@ -16,6 +16,11 @@
@@ -263,7 +267,7 @@ index b511c428..7521c7e1 100644
    DirectHandle<JSObject> target_global_proxy(target->global_proxy(), isolate);
  
 diff --git a/src/builtins/builtins-global.cc b/src/builtins/builtins-global.cc
-index 89be05c0..f856a080 100644
+index 89be05c..f856a08 100644
 --- a/src/builtins/builtins-global.cc
 +++ b/src/builtins/builtins-global.cc
 @@ -12,6 +12,11 @@
@@ -291,7 +295,7 @@ index 89be05c0..f856a080 100644
      isolate->CountUsage(v8::Isolate::kFunctionConstructorReturnedUndefined);
      return ReadOnlyRoots(isolate).undefined_value();
 diff --git a/src/builtins/builtins-reflect.cc b/src/builtins/builtins-reflect.cc
-index 4281d4e3..bf227014 100644
+index 4281d4e..bf22701 100644
 --- a/src/builtins/builtins-reflect.cc
 +++ b/src/builtins/builtins-reflect.cc
 @@ -90,6 +90,13 @@ BUILTIN(ReflectSet) {
@@ -309,7 +313,7 @@ index 4281d4e3..bf227014 100644
    LookupIterator it(isolate, receiver, lookup_key, target_recv);
    Maybe<bool> result = Object::SetSuperProperty(
 diff --git a/src/builtins/reflect.tq b/src/builtins/reflect.tq
-index 0a39c9f4..7fe16b57 100644
+index 0a39c9f..7fe16b5 100644
 --- a/src/builtins/reflect.tq
 +++ b/src/builtins/reflect.tq
 @@ -61,6 +61,9 @@ extern transitioning builtin GetPropertyWithReceiver(
@@ -333,7 +337,7 @@ index 0a39c9f4..7fe16b57 100644
        objectJSReceiver, name, receiver, SmiConstant(kReturnUndefined));
  }
 diff --git a/src/compiler/js-call-reducer.cc b/src/compiler/js-call-reducer.cc
-index 0b4cc923..c7ef59e1 100644
+index 0b4cc92..c7ef59e 100644
 --- a/src/compiler/js-call-reducer.cc
 +++ b/src/compiler/js-call-reducer.cc
 @@ -4433,221 +4433,8 @@ Reduction JSCallReducer::ReduceCallWasmFunction(
@@ -561,7 +565,7 @@ index 0b4cc923..c7ef59e1 100644
  
  namespace {
 diff --git a/src/ic/accessor-assembler.cc b/src/ic/accessor-assembler.cc
-index cdb0c153..1ba76065 100644
+index cdb0c15..1ba7606 100644
 --- a/src/ic/accessor-assembler.cc
 +++ b/src/ic/accessor-assembler.cc
 @@ -6044,6 +6044,8 @@ void AccessorAssembler::GenerateKeyedHasIC() {
@@ -574,7 +578,7 @@ index cdb0c153..1ba76065 100644
        MakeLoadICParameters(context, receiver, name, slot, vector);
    KeyedLoadIC(&p, LoadAccessMode::kHas);
 diff --git a/src/init/v8.cc b/src/init/v8.cc
-index 91463a1e..c5b9b2fa 100644
+index 91463a1..c5b9b2f 100644
 --- a/src/init/v8.cc
 +++ b/src/init/v8.cc
 @@ -269,6 +269,8 @@ void V8::Initialize() {
@@ -587,7 +591,7 @@ index 91463a1e..c5b9b2fa 100644
  
  void V8::Dispose() {
 diff --git a/src/interpreter/bytecode-generator.cc b/src/interpreter/bytecode-generator.cc
-index ae6d376a..63563a59 100644
+index ae6d376..4f95076 100644
 --- a/src/interpreter/bytecode-generator.cc
 +++ b/src/interpreter/bytecode-generator.cc
 @@ -5975,6 +5975,36 @@ void BytecodeGenerator::VisitAssignment(Assignment* expr) {
@@ -627,7 +631,43 @@ index ae6d376a..63563a59 100644
    builder()->SetExpressionPosition(expr);
    BuildAssignment(lhs_data, expr->op(), expr->lookup_hoisting_mode());
  }
-@@ -6534,6 +6564,20 @@ void BytecodeGenerator::VisitPropertyLoad(Register obj, Property* property) {
+@@ -6083,6 +6113,35 @@ void BytecodeGenerator::VisitCompoundAssignment(CompoundAssignment* expr) {
+     VisitForAccumulatorValue(expr->value());
+     builder()->BinaryOperation(binop->op(), old_value, kFeedbackIsEmbedded);
+   }
++#ifdef VV8_TRACE_PROPERTIES
++  // VisibleV8 (trace assignments to named/keyed properties only)
++  if ((lhs_data.assign_type() == NAMED_PROPERTY) ||
++      (lhs_data.assign_type() == KEYED_PROPERTY)) {
++    // Save accumulator for later restoration
++    Register saved_acc = register_allocator()->NewRegister();
++    builder()->StoreAccumulatorInRegister(saved_acc);
++
++    // Trace object/property/new-value for this assignment
++    RegisterList trace_args = register_allocator()->NewRegisterList(4);
++    builder()
++        ->LoadLiteral(Smi::FromInt(expr->position()))
++        .StoreAccumulatorInRegister(trace_args[0])
++        .MoveRegister(lhs_data.object(), trace_args[1])
++        .MoveRegister(saved_acc, trace_args[3]);
++    if (lhs_data.assign_type() == NAMED_PROPERTY) {
++      builder()
++          ->LoadLiteral(lhs_data.name())
++          .StoreAccumulatorInRegister(trace_args[2]);
++    } else {
++      builder()->MoveRegister(lhs_data.key(), trace_args[2]);
++    }
++    builder()->CallRuntime(Runtime::kTracePropertyStore,
++                           trace_args);  // args: (call-site, this, key, value)
++
++    // Restore accumulator
++    builder()->LoadAccumulatorWithRegister(saved_acc);
++  }
++#endif
+   builder()->SetExpressionPosition(expr);
+ 
+   BuildAssignment(lhs_data, expr->op(), expr->lookup_hoisting_mode());
+@@ -6534,6 +6593,20 @@ void BytecodeGenerator::VisitPropertyLoad(Register obj, Property* property) {
      case NON_PROPERTY:
        UNREACHABLE();
      case NAMED_PROPERTY: {
@@ -648,7 +688,7 @@ index ae6d376a..63563a59 100644
        builder()->SetExpressionPosition(property);
        const AstRawString* name =
            property->key()->AsLiteral()->AsRawPropertyName();
-@@ -6559,7 +6603,28 @@ void BytecodeGenerator::VisitPropertyLoad(Register obj, Property* property) {
+@@ -6559,7 +6632,28 @@ void BytecodeGenerator::VisitPropertyLoad(Register obj, Property* property) {
              feedback_index(feedback_spec()->AddKeyedLoadICSlot()));
          break;
        }
@@ -677,7 +717,7 @@ index ae6d376a..63563a59 100644
        builder()->SetExpressionPosition(property);
        BuildLoadKeyedProperty(obj, feedback_spec()->AddKeyedLoadICSlot());
        break;
-@@ -6874,6 +6939,8 @@ void BytecodeGenerator::VisitCall(Call* expr) {
+@@ -6874,6 +6968,8 @@ void BytecodeGenerator::VisitCall(Call* expr) {
    Expression* callee_expr = expr->expression();
    Call::CallType call_type = expr->GetCallType();
  
@@ -686,7 +726,7 @@ index ae6d376a..63563a59 100644
    if (call_type == Call::SUPER_CALL) {
      return VisitCallSuper(expr);
    }
-@@ -7665,6 +7732,33 @@ void BytecodeGenerator::VisitCountOperation(CountOperation* expr) {
+@@ -7665,6 +7761,33 @@ void BytecodeGenerator::VisitCountOperation(CountOperation* expr) {
    // Perform +1/-1 operation.
    builder()->UnaryOperation(expr->op(), kFeedbackIsEmbedded);
  
@@ -721,7 +761,7 @@ index ae6d376a..63563a59 100644
    builder()->SetExpressionPosition(expr);
    switch (assign_type) {
 diff --git a/src/objects/lookup-inl.h b/src/objects/lookup-inl.h
-index a14a9b2e..d3aa40cd 100644
+index a14a9b2..d3aa40c 100644
 --- a/src/objects/lookup-inl.h
 +++ b/src/objects/lookup-inl.h
 @@ -439,6 +439,14 @@ MaybeDirectHandle<Object> Object::SetElement(Isolate* isolate,
@@ -740,10 +780,10 @@ index a14a9b2e..d3aa40cd 100644
                                                   DirectHandle<JSAny> object,
                                                   DirectHandle<Name> name) {
 diff --git a/src/objects/objects.cc b/src/objects/objects.cc
-index 3ff2dd2f..2c798a6e 100644
+index 3ff2dd2..fcf9aea 100644
 --- a/src/objects/objects.cc
 +++ b/src/objects/objects.cc
-@@ -1316,6 +1316,90 @@ MaybeHandle<Object> Object::InstantiateIfLazyClosure(
+@@ -1316,6 +1316,91 @@ MaybeHandle<Object> Object::InstantiateIfLazyClosure(
    return MaybeHandle<Object>();
  }
  
@@ -761,8 +801,8 @@ index 3ff2dd2f..2c798a6e 100644
 +        // In case of global IC, the receiver is the global object. Replace by
 +        // the global proxy.
 +        if (IsJSGlobalObject(*receiver)) {
-+          receiver = direct_handle(
-+              Cast<JSGlobalObject>(*receiver)->global_proxy(), it->isolate());
++          receiver = handle(Cast<JSGlobalObject>(*receiver)->global_proxy(),
++                            it->isolate());
 +        }
 +        if (is_global_reference) {
 +          Maybe<bool> maybe = JSProxy::HasProperty(
@@ -793,8 +833,9 @@ index 3ff2dd2f..2c798a6e 100644
 +      case LookupIterator::ACCESS_CHECK:
 +        if (it->HasAccess()) continue;
 +        return JSObject::GetPropertyWithFailedAccessCheck(it);
-+      case LookupIterator::MODULE_NAMESPACE:
-+        return it->isolate()->factory()->undefined_value();
++      case LookupIterator::MODULE_NAMESPACE: // Look I even kept it in the same place
++        return it->isolate()->factory()->undefined_value(); // Hope this did not break anything
++        // I think there is a way to do this by lazyevaluating module?
 +      case LookupIterator::ACCESSOR:
 +        return it->isolate()->factory()->undefined_value();
 +      case LookupIterator::TYPED_ARRAY_INDEX_NOT_FOUND:
@@ -806,10 +847,10 @@ index 3ff2dd2f..2c798a6e 100644
 +      case LookupIterator::NOT_FOUND:
 +        if (it->IsAnyPrivateName()) {
 +          auto private_symbol = Cast<Symbol>(it->name());
-+          DirectHandle<String> name_string(
++          Handle<String> name_string(
 +              Cast<String>(private_symbol->description()), it->isolate());
 +          if (private_symbol->is_private_brand()) {
-+            DirectHandle<String> class_name =
++            Handle<String> class_name =
 +                (name_string->length() == 0)
 +                    ? it->isolate()->factory()->anonymous_string()
 +                    : name_string;
@@ -835,7 +876,7 @@ index 3ff2dd2f..2c798a6e 100644
  MaybeHandle<Object> Object::GetProperty(LookupIterator* it,
                                          bool is_global_reference) {
 diff --git a/src/objects/objects.h b/src/objects/objects.h
-index 53945dac..5d00d92d 100644
+index 53945da..5d00d92 100644
 --- a/src/objects/objects.h
 +++ b/src/objects/objects.h
 @@ -363,6 +363,11 @@ class Object : public AllStatic {
@@ -863,7 +904,7 @@ index 53945dac..5d00d92d 100644
        Isolate* isolate, DirectHandle<JSAny> object, DirectHandle<Name> name);
    V8_WARN_UNUSED_RESULT static inline MaybeHandle<Object> GetPropertyOrElement(
 diff --git a/src/runtime/runtime-compiler.cc b/src/runtime/runtime-compiler.cc
-index e998c4d5..fe5aa80b 100644
+index e998c4d..fe5aa80 100644
 --- a/src/runtime/runtime-compiler.cc
 +++ b/src/runtime/runtime-compiler.cc
 @@ -24,6 +24,11 @@
@@ -893,7 +934,7 @@ index e998c4d5..fe5aa80b 100644
    LanguageMode language_mode = static_cast<LanguageMode>(args.smi_value_at(3));
    DirectHandle<SharedFunctionInfo> outer_info(args.at<JSFunction>(2)->shared(),
 diff --git a/src/runtime/runtime-test.cc b/src/runtime/runtime-test.cc
-index d0d013c6..0ceb6ef8 100644
+index d0d013c..3091862 100644
 --- a/src/runtime/runtime-test.cc
 +++ b/src/runtime/runtime-test.cc
 @@ -4,6 +4,32 @@
@@ -919,9 +960,9 @@ index d0d013c6..0ceb6ef8 100644
 +#include "src/builtins/builtins-utils.h"
 +#include "src/objects/keys.h"
 +#include "src/runtime/runtime-utils.h"
-+#include "v8-local-handle.h"
-+#include "v8-primitive.h"
-+#include "v8config.h"
++#include "v8-local-handle.h"  // NOLINT(build/include_directory)
++#include "v8-primitive.h"     // NOLINT(build/include_directory)
++#include "v8config.h"         // NOLINT(build/include_directory)
 +#if BUILDFLAG(IS_ANDROID)
 +#include <sys/prctl.h>
 +#endif
@@ -929,7 +970,7 @@ index d0d013c6..0ceb6ef8 100644
  #include <stdio.h>
  
  #include <iomanip>
-@@ -1727,6 +1753,75 @@ RUNTIME_FUNCTION(Runtime_TraceExit) {
+@@ -1727,6 +1753,85 @@ RUNTIME_FUNCTION(Runtime_TraceExit) {
    return obj;  // return TOS
  }
  
@@ -937,6 +978,9 @@ index d0d013c6..0ceb6ef8 100644
 +  HandleScope hs(isolate);
 +  DCHECK_EQ(3, args.length());
 +
++  //   CONVERT_ARG_CHECKED(Smi, call_site, 0);
++  //   CONVERT_ARG_CHECKED(Object, obj, 1);
++  //   CONVERT_ARG_CHECKED(Object, prop, 2);
 +  Tagged<Object> call_site = args[0];
 +  Tagged<Object> obj = args[1];
 +  Tagged<Object> prop = args[2];
@@ -949,6 +993,10 @@ index d0d013c6..0ceb6ef8 100644
 +
 +RUNTIME_FUNCTION(Runtime_TracePropertyStore) {
 +  HandleScope hs(isolate);
++  //   CONVERT_ARG_CHECKED(Smi, call_site, 0);
++  //   CONVERT_ARG_CHECKED(Object, obj, 1);
++  //   CONVERT_ARG_CHECKED(Object, prop, 2);
++  //   CONVERT_ARG_CHECKED(Object, value, 3);
 +
 +  Tagged<Object> call_site = args[0];
 +  Tagged<Object> obj = args[1];
@@ -980,11 +1028,14 @@ index d0d013c6..0ceb6ef8 100644
 +  Tagged<JSFunction> target = Cast<JSFunction>(args[0]);
 +  Tagged<Smi> argc = Cast<Smi>(args[1]);
 +
++  // This peice of code reassembles the mess of a pointer
++  // that we made in HandleApiCallOrConstruct in builtins-call-gen.cc
 +  Address argv_ptr_val = 0;
 +  for (int i = 2; i < 2 + 4; ++i) {
 +    argv_ptr_val <<= 16;
 +    CHECK(IsSmi(args[i]));
 +    uint32_t chunk = Cast<Smi>(args[i]).value();
++    // We encode 16 bit per chunk only!
 +    CHECK_EQ(chunk & 0xFFFF0000, 0);
 +    argv_ptr_val |= chunk;
 +  }
@@ -1007,10 +1058,10 @@ index d0d013c6..0ceb6ef8 100644
    CHECK_UNLESS_FUZZING(args.length() == 2);
 diff --git a/src/runtime/runtime-utils.cc b/src/runtime/runtime-utils.cc
 new file mode 100644
-index 00000000..9700ac69
+index 0000000..65881e4
 --- /dev/null
 +++ b/src/runtime/runtime-utils.cc
-@@ -0,0 +1,709 @@
+@@ -0,0 +1,711 @@
 +#include "src/runtime/runtime-utils.h"
 +namespace v8::internal {
 +
@@ -1120,14 +1171,16 @@ index 00000000..9700ac69
 +      out << '/';
 +      myPrintUC16(Cast<JSRegExp>(obj)->source(isolate), out, 0, max_len);
 +      out << '/';
++    } else if (IsSymbol(obj)) {
++      Tagged<Symbol> sym = Cast<Symbol>(obj);
++      if (!IsUndefined(sym->description())) {
++        myPrintUC16(Cast<String>(sym->description()), out, 0, max_len);
++      } else {
++        out << '?';
++      }
 +    } else if (IsJSReceiver(obj)) {
 +      Handle<JSReceiver> rcvr = handle(Cast<JSReceiver>(obj), isolate);
-+      DirectHandle<String> ctor;
-+      if (IsJSGlobalProxy(*rcvr) || IsJSGlobalObject(*rcvr)) {
-+        ctor = isolate->factory()->NewStringFromAsciiChecked("global");
-+      } else {
-+        ctor = JSReceiver::GetConstructorName(isolate, rcvr);
-+      }
++      DirectHandle<String> ctor = JSReceiver::GetConstructorName(isolate, rcvr);
 +      out << '{';
 +      out << rcvr->GetOrCreateIdentityHash(isolate).value();
 +      if (iter_obj && (strcmp(ctor->ToCString().get(), "Object") == 0 ||
@@ -1721,17 +1774,17 @@ index 00000000..9700ac69
 +
 +}  // namespace v8::internal
 diff --git a/src/runtime/runtime-utils.h b/src/runtime/runtime-utils.h
-index 345e326e..224d85a2 100644
+index 345e326..bb23a1b 100644
 --- a/src/runtime/runtime-utils.h
 +++ b/src/runtime/runtime-utils.h
-@@ -5,6 +5,75 @@
+@@ -5,6 +5,78 @@
  #ifndef V8_RUNTIME_RUNTIME_UTILS_H_
  #define V8_RUNTIME_RUNTIME_UTILS_H_
  
 +#include <pthread.h>
 +#include <signal.h>
 +#include <stdio.h>
-+#include <sys/syscall.h>
++#include <sys/syscall.h>  // Horrible VisV8 hack--forgive me...
 +#include <unistd.h>
 +#include <algorithm>
 +#include <cstdint>
@@ -1784,23 +1837,26 @@ index 345e326e..224d85a2 100644
 +#include "src/profiler/heap-snapshot-generator.h"
 +#include "src/regexp/regexp.h"
 +#include "src/snapshot/snapshot.h"
-+#include "v8-local-handle.h"
-+#include "v8-primitive.h"
-+#include "v8config.h"
++#include "v8-local-handle.h"  // NOLINT(build/include_directory)
++#include "v8-primitive.h"     // NOLINT(build/include_directory)
++#include "v8config.h"         // NOLINT(build/include_directory)
++
 +#if BUILDFLAG(IS_ANDROID)
 +#include <sys/prctl.h>
 +#endif
++
 +#ifdef V8_ENABLE_MAGLEV
 +#include "src/maglev/maglev.h"
-+#endif
++#endif  // V8_ENABLE_MAGLEV
++
 +#if V8_ENABLE_WEBASSEMBLY
 +#include "src/wasm/wasm-engine.h"
-+#endif
++#endif  // V8_ENABLE_WEBASSEMBLY
 +
  #include "src/objects/objects.h"
  
  namespace v8 {
-@@ -43,6 +112,33 @@ static inline ObjectPair MakePair(Tagged<Object> x, Tagged<Object> y) {
+@@ -43,6 +115,33 @@ static inline ObjectPair MakePair(Tagged<Object> x, Tagged<Object> y) {
  }
  #endif
  
@@ -1835,7 +1891,7 @@ index 345e326e..224d85a2 100644
  }  // namespace v8
  
 diff --git a/src/runtime/runtime.cc b/src/runtime/runtime.cc
-index 5a5a01f0..843e8430 100644
+index 5a5a01f..843e843 100644
 --- a/src/runtime/runtime.cc
 +++ b/src/runtime/runtime.cc
 @@ -397,5 +397,31 @@ std::ostream& operator<<(std::ostream& os, Runtime::FunctionId id) {
@@ -1871,7 +1927,7 @@ index 5a5a01f0..843e8430 100644
  }  // namespace internal
  }  // namespace v8
 diff --git a/src/runtime/runtime.h b/src/runtime/runtime.h
-index 9d06fcb2..7ff9aa6e 100644
+index 9d06fcb..7ff9aa6 100644
 --- a/src/runtime/runtime.h
 +++ b/src/runtime/runtime.h
 @@ -580,6 +580,8 @@ constexpr bool CanTriggerGC(T... properties) {

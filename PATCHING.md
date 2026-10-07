@@ -68,38 +68,7 @@ Applied from the root of the V8 submodule (`src/v8/`):
 
 ---
 
-## 3. Breaking Changes & Churn to Expect (Chrome 147 → 155)
-
-Jumping across major releases brings upstream refactoring. Focus on these known areas of churn:
-
-### 1. `src/interpreter/bytecode-generator.cc`
-- Line numbers shift heavily as new JavaScript language proposals, bytecode optimizations, and AST node types are merged upstream.
-- **Evaluation Order**: In `VisitPropertyLoad(Register obj, Property* property)`, VisibleV8 evaluates the property key into a temporary register (`key_reg`) to trace `(call-site, this, key)` before loading the value into the accumulator.
-- **Register Allocation**: Upstream frequently refactors the register allocator. Ensure registers allocated via `register_allocator()->NewRegisterList(...)` and `NewRegister()` do not clobber active registers or violate allocation scopes.
-
-### 2. V8 Handle Migration (`DirectHandle`, `Handle`, `Tagged`)
-- Upstream V8 strictly enforces `DirectHandle<T>` for stack-allocated references that do not survive across GC safepoints, replacing legacy indirect `Handle<T>`.
-- `Tagged<T>` represents raw unboxed pointers without handle indirection.
-- Ensure all calls in `src/runtime/runtime-utils.cc`, `src/runtime/runtime-test.cc`, `src/api/api.cc`, and `src/objects/objects.cc` use the exact handle types expected by the target V8 version.
-- **Size / Length Accessors**: In Chrome 147, `contents->length()` changed to `(contents->length()).value()` because the length became a `SafeHeapObjectSize`. Always verify return types of `.length()` and `.size()` methods.
-
-### 3. `LookupIterator` Exhaustiveness in `Object::VV8GetPropertyNoSideEffects`
-- In `src/objects/objects.cc`, `VV8GetPropertyNoSideEffects` contains a `switch (it->state())`.
-- Chrome 147 introduced `LookupIterator::MODULE_NAMESPACE`.
-- V8 compiles with `-Werror=switch`. If upstream introduces any new enum states in `src/objects/lookup.h`, compilation will abort unless all enum variants are explicitly handled.
-
-### 4. Compiler Optimization Pipelines (TurboFan, Turboshaft, Maglev)
-- TurboFan's `JSCallReducer::ReduceCallApiFunction` is disabled by VisibleV8 (`return NoChange()`).
-- In modern V8 (v12+ / Chrome 120-155), optimization passes are increasingly handled by **Turboshaft** and **Maglev**.
-- Verify whether upstream has migrated API call lowering or fast API calls to Turboshaft reducers (`src/compiler/turboshaft/`) or Maglev. If Maglev or Turboshaft inlines API calls directly into machine code, ensure the corresponding reducers are disabled or stubbed so calls cannot bypass logging.
-
-### 5. Torque Builtin Churn (`reflect.tq`)
-- `src/builtins/reflect.tq` is compiled by V8's internal Torque compiler (`torque`).
-- If Torque syntax, type declarations (e.g., `JSAny`, `AnyName`, `Context`), or macro signatures change in the upstream version, update `reflect.tq` to match the target V8 Torque specification.
-
----
-
-## 4. Porting Strategy & Conflict Resolution Workflow
+## 3. Porting Strategy & Conflict Resolution Workflow
 
 When migrating patchsets between versions, follow this systematic workflow:
 
@@ -131,7 +100,7 @@ Inside the container, inspect where the patch failed and resolve rejects directl
 
 ---
 
-## 5. Step-by-Step Patching Walk-Through
+## 4. Step-by-Step Patching Walk-Through
 
 ### Prerequisites
 - Linux host or Docker (AMD64 / x86_64).
@@ -361,7 +330,7 @@ Verify the generated logs produce valid format entries:
 
 ---
 
-## 6. Build Automation & Release Verification
+## 5. Build Automation & Release Verification
 
 VisibleV8's automated build script (`builder/build-direct.sh`) dynamically resolves the patchset using:
 ```bash
@@ -387,7 +356,7 @@ Resulting packages are saved to `builder/artifacts/155.0.8059.30/`:
 
 ---
 
-## 7. Troubleshooting & Common Pitfalls
+## 6. Troubleshooting & Common Pitfalls
 
 | Error / Symptom | Root Cause | Fix |
 |---|---|---|
