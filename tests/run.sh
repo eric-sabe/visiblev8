@@ -29,7 +29,7 @@ if [ ! -d "$SUITE_DIR" ]; then
     exit 1
 fi
 
-docker run $PRIV --rm \
+docker run --platform linux/amd64 $PRIV --rm \
     -v "$ARTIFACTS_DIR:/artifacts:rw" \
     -v "$SRC_DIR:/testsrc:ro" \
     -v "$TOOLS_DIR:/tools:ro" \

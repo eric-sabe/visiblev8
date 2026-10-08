@@ -24,6 +24,15 @@ index 4449bb1a..4dfcd580 100644
            android:exported="false"
            {% if (i == 0) %}
            android:useAppZygote="true"
+@@ -1389,7 +1389,7 @@ by a child template that "extends" this file.
+           android:nativeService="true"
+           android:process=":sandboxed_process{{ i }}"
+           android:permission="{{ manifest_package }}.permission.CHILD_SERVICE"
+-          android:isolatedProcess="true"
++          android:isolatedProcess="false"
+           {% if (i == 0) %}
+           android:useAppZygote="true"
+           {% endif %}
 diff --git a/content/renderer/java/gin_java_function_invocation_helper.cc b/content/renderer/java/gin_java_function_invocation_helper.cc
 index 12e1b810..d3c10f20 100644
 --- a/content/renderer/java/gin_java_function_invocation_helper.cc
