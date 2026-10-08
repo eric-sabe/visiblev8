@@ -8,8 +8,11 @@ VERSION="${1:-155.0.8059.30}"
 # Normalize line endings on test files (prevent CRLF character offset discrepancies)
 sed -i 's/\r$//' "$VV8_DIR/tests/src"/* "$VV8_DIR/tests/logs"/* 2>/dev/null || true
 
-# Look for pre-compiled vv8-shell in artifacts
-ARTIFACT_SHELL=$(find "$VV8_DIR/builder/artifacts" "$HOME/visiblev8/builder/artifacts" /artifacts -name "vv8-shell*" -type f 2>/dev/null | head -n 1)
+# Look for pre-compiled vv8-shell matching $VERSION in artifacts
+ARTIFACT_SHELL=$(find "$VV8_DIR/builder/artifacts/$VERSION" "$HOME/visiblev8/builder/artifacts/$VERSION" /artifacts/$VERSION -name "vv8-shell*" -type f 2>/dev/null | head -n 1)
+if [ -z "$ARTIFACT_SHELL" ]; then
+    ARTIFACT_SHELL=$(find "$VV8_DIR/builder/artifacts" "$HOME/visiblev8/builder/artifacts" /artifacts -name "*vv8-shell*$VERSION*" -type f 2>/dev/null | head -n 1)
+fi
 
 if [ -n "$ARTIFACT_SHELL" ]; then
     echo "=== Found Pre-compiled V8 Shell: $ARTIFACT_SHELL ==="
